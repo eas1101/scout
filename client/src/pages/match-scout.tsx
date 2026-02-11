@@ -1,16 +1,14 @@
-import { useState } from "react";
-import { useApp, ScoringItem } from "@/lib/store";
+import { useState, useEffect } from "react";
+import { useApp, ScoringItem, MatchRecord } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Save, Plus, Minus, RotateCcw } from "lucide-react";
+import { Save, Plus, Minus, RotateCcw, CloudDownload, CloudUpload } from "lucide-react";
 
 export default function MatchScout() {
   const { state, dispatch } = useApp();
@@ -20,18 +18,21 @@ export default function MatchScout() {
   const [teamNumber, setTeamNumber] = useState("");
   const [alliance, setAlliance] = useState<"red" | "blue">("blue");
   const [scoutName, setScoutName] = useState("");
+  const [isSyncing, setIsSyncing] = useState(false);
   
   // Initialize form data based on schema
-  const [formData, setFormData] = useState<Record<string, any>>(() => {
+  const [formData, setFormData] = useState<Record<string, any>>({});
+
+  useEffect(() => {
     const initial: Record<string, any> = {};
     state.schema.forEach(item => {
       if (item.type === "boolean") initial[item.id] = false;
-      if (item.type === "score") initial[item.id] = item.min || 0;
+      if (item.type === "score" || item.type === "manual_score") initial[item.id] = item.min || 0;
       if (item.type === "grade") initial[item.id] = "C";
       if (item.type === "text") initial[item.id] = "";
     });
-    return initial;
-  });
+    setFormData(initial);
+  }, [state.schema]);
 
   const handleReset = () => {
     setMatchNumber("");
@@ -39,24 +40,44 @@ export default function MatchScout() {
     const resetData: Record<string, any> = {};
     state.schema.forEach(item => {
       if (item.type === "boolean") resetData[item.id] = false;
-      if (item.type === "score") resetData[item.id] = item.min || 0;
+      if (item.type === "score" || item.type === "manual_score") resetData[item.id] = item.min || 0;
       if (item.type === "grade") resetData[item.id] = "C";
       if (item.type === "text") resetData[item.id] = "";
     });
     setFormData(resetData);
   };
 
-  const handleSave = () => {
+  const handleFetchFromSheets = async () => {
+    if (!state.settings.sheetUrl) {
+      toast({ title: "錯誤", description: "請先在設定中設定 Google Script URL", variant: "destructive" });
+      return;
+    }
+    setIsSyncing(true);
+    try {
+      const response = await fetch(state.settings.sheetUrl);
+      const data = await response.json();
+      if (Array.isArray(data)) {
+        dispatch({ type: "SET_MATCH_RECORDS", payload: data });
+        toast({ title: "同步成功", description: `已從試算表抓取 ${data.length} 筆資料` });
+      }
+    } catch (e) {
+      toast({ title: "同步失敗", description: "無法連線到 Google Script", variant: "destructive" });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleSave = async () => {
     if (!matchNumber || !teamNumber) {
       toast({
-        title: "Missing Info",
-        description: "Please enter Match Number and Team Number",
+        title: "資訊不足",
+        description: "請輸入場次編號與隊伍編號",
         variant: "destructive"
       });
       return;
     }
 
-    const newRecord = {
+    const newRecord: MatchRecord = {
       id: crypto.randomUUID(),
       matchNumber,
       teamNumber,
@@ -66,16 +87,33 @@ export default function MatchScout() {
       timestamp: Date.now()
     };
 
+    // 1. Save locally
     dispatch({ type: "ADD_MATCH_RECORD", payload: newRecord });
     
-    toast({
-      title: "Data Saved",
-      description: `Match ${matchNumber} - Team ${teamNumber} saved successfully.`,
-    });
+    // 2. Try to save to Google Sheets if URL exists
+    if (state.settings.sheetUrl) {
+      setIsSyncing(true);
+      try {
+        await fetch(state.settings.sheetUrl, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(newRecord)
+        });
+        toast({ title: "雲端儲存成功", description: "資料已傳送至 Google 試算表" });
+      } catch (e) {
+        toast({ title: "雲端儲存失敗", description: "資料已存於本地，但無法上傳至雲端", variant: "destructive" });
+      } finally {
+        setIsSyncing(false);
+      }
+    } else {
+      toast({
+        title: "本地儲存成功",
+        description: `場次 ${matchNumber} - 隊伍 ${teamNumber} 已儲存。`,
+      });
+    }
     
-    // Optional: Reset only team number for next match
     setTeamNumber("");
-    // setMatchNumber((prev) => (parseInt(prev) + 1).toString()); // Auto increment
   };
 
   const updateField = (id: string, value: any) => {
@@ -86,9 +124,14 @@ export default function MatchScout() {
     <div className="space-y-6 max-w-4xl mx-auto pb-20">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-display font-bold text-primary">MATCH SCOUTING</h1>
-        <Button variant="outline" onClick={handleReset} className="gap-2">
-          <RotateCcw className="w-4 h-4" /> Reset
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={handleFetchFromSheets} disabled={isSyncing} className="gap-2">
+            <CloudDownload className="w-4 h-4" /> 同步雲端
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleReset} className="gap-2">
+            <RotateCcw className="w-4 h-4" /> 重置
+          </Button>
+        </div>
       </div>
 
       {/* Pre-Match Info */}
@@ -182,9 +225,18 @@ export default function MatchScout() {
                   </div>
                 )}
 
+                {item.type === "manual_score" && (
+                  <Input 
+                    type="number"
+                    value={formData[item.id]}
+                    onChange={(e) => updateField(item.id, parseInt(e.target.value) || 0)}
+                    className="bg-background/50 h-12 text-2xl font-mono text-center text-primary border-primary/30"
+                  />
+                )}
+
                 {item.type === "boolean" && (
                   <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground text-sm">{formData[item.id] ? "COMPLETED" : "NOT COMPLETED"}</span>
+                    <span className="text-muted-foreground text-sm">{formData[item.id] ? "是" : "否"}</span>
                     <Switch 
                       checked={formData[item.id]}
                       onCheckedChange={(c) => updateField(item.id, c)}
@@ -216,7 +268,7 @@ export default function MatchScout() {
                   <Textarea 
                     value={formData[item.id]}
                     onChange={(e) => updateField(item.id, e.target.value)}
-                    placeholder="Enter notes here..."
+                    placeholder="輸入筆記..."
                     className="bg-background/50 min-h-[100px]"
                   />
                 )}
@@ -230,8 +282,10 @@ export default function MatchScout() {
         size="lg" 
         className="w-full h-14 text-lg font-display tracking-widest gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_20px_rgba(var(--primary),0.4)]"
         onClick={handleSave}
+        disabled={isSyncing}
       >
-        <Save className="w-5 h-5" /> SAVE MATCH DATA
+        {isSyncing ? <CloudUpload className="animate-bounce" /> : <Save className="w-5 h-5" />} 
+        {isSyncing ? "SYNCING..." : "SAVE MATCH DATA"}
       </Button>
     </div>
   );

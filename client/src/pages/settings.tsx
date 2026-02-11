@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Trash2, Plus, Save } from "lucide-react";
+import { Trash2, Plus, Save, ExternalLink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function SettingsPage() {
@@ -28,7 +28,7 @@ export default function SettingsPage() {
 
   const handleSaveSettings = () => {
     dispatch({ type: "UPDATE_SETTINGS", payload: { sheetUrl } });
-    toast({ title: "Settings Saved", description: "Google Sheet URL updated." });
+    toast({ title: "設定已儲存", description: "Google Script URL 已更新。" });
   };
 
   const handleAddItem = () => {
@@ -38,14 +38,14 @@ export default function SettingsPage() {
       id: newItemLabel.toLowerCase().replace(/\s+/g, "_") + "_" + Math.floor(Math.random() * 1000),
       label: newItemLabel,
       type: newItemType,
-      min: newItemType === "score" ? parseInt(newItemMin) : undefined,
-      max: newItemType === "score" ? parseInt(newItemMax) : undefined,
+      min: (newItemType === "score" || newItemType === "manual_score") ? parseInt(newItemMin) : undefined,
+      max: (newItemType === "score" || newItemType === "manual_score") ? parseInt(newItemMax) : undefined,
       order: state.schema.length,
     };
 
     dispatch({ type: "ADD_SCHEMA_ITEM", payload: newItem });
     setNewItemLabel("");
-    toast({ title: "Item Added", description: `${newItemLabel} added to scoring schema.` });
+    toast({ title: "項目已新增", description: `${newItemLabel} 已加入評分結構。` });
   };
 
   const handleDeleteItem = (id: string) => {
@@ -59,12 +59,12 @@ export default function SettingsPage() {
       {/* Google Sheets Integration */}
       <Card className="tech-border bg-card/50">
         <CardHeader>
-          <CardTitle>DATA INTEGRATION</CardTitle>
-          <CardDescription>Connect to Google Sheets for cloud storage.</CardDescription>
+          <CardTitle>數據同步設定</CardTitle>
+          <CardDescription>將此應用程式連結至 Google 試算表。</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid w-full gap-2">
-            <Label htmlFor="sheet-url">Google Sheet / Script URL</Label>
+            <Label htmlFor="sheet-url">Google Apps Script 部署 URL</Label>
             <div className="flex gap-2">
               <Input
                 id="sheet-url"
@@ -74,12 +74,18 @@ export default function SettingsPage() {
                 className="bg-background/50 font-mono text-sm"
               />
               <Button onClick={handleSaveSettings}>
-                <Save className="w-4 h-4 mr-2" /> Save
+                <Save className="w-4 h-4 mr-2" /> 儲存
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              * Note: This requires a Google Apps Script deployed as a Web App to receive POST requests.
-            </p>
+            <div className="p-4 bg-muted/20 rounded border border-muted-foreground/20 text-xs space-y-2">
+              <p className="font-bold">設定教學：</p>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>開啟 Google 試算表，進入「擴充功能」{">"}「Apps Script」。</li>
+                <li>貼上 doGet(e) 與 doPost(e) 的處理程式碼。</li>
+                <li>點擊「部署」{">"}「新部署」，選擇「網頁應用程式」。</li>
+                <li>存取權限設為「任何人」，部署後複製網址貼至上方。</li>
+              </ol>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -87,49 +93,50 @@ export default function SettingsPage() {
       {/* Scoring Schema Editor */}
       <Card className="tech-border bg-card/50">
         <CardHeader>
-          <CardTitle>SCORING SCHEMA</CardTitle>
-          <CardDescription>Customize what data you collect during matches.</CardDescription>
+          <CardTitle>評分項目自定義</CardTitle>
+          <CardDescription>設定要在比賽中蒐集的數據欄位。</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col md:flex-row gap-4 mb-6 items-end p-4 border border-primary/20 rounded-md bg-primary/5">
             <div className="grid gap-2 flex-1">
-              <Label>Label</Label>
+              <Label>項目名稱</Label>
               <Input 
                 value={newItemLabel} 
                 onChange={(e) => setNewItemLabel(e.target.value)} 
-                placeholder="e.g., Coral Scored L1"
+                placeholder="例如：自動階段得分"
               />
             </div>
-            <div className="grid gap-2 w-full md:w-[150px]">
-              <Label>Type</Label>
+            <div className="grid gap-2 w-full md:w-[200px]">
+              <Label>計分方式</Label>
               <Select value={newItemType} onValueChange={(v: any) => setNewItemType(v)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="score">Score (Num)</SelectItem>
-                  <SelectItem value="grade">Grade (S-F)</SelectItem>
-                  <SelectItem value="boolean">Boolean</SelectItem>
-                  <SelectItem value="text">Text</SelectItem>
+                  <SelectItem value="score">分數 (+/- 按鈕)</SelectItem>
+                  <SelectItem value="manual_score">分數 (直接輸入)</SelectItem>
+                  <SelectItem value="grade">評級 (S-F 級)</SelectItem>
+                  <SelectItem value="boolean">是否開關 (Yes/No)</SelectItem>
+                  <SelectItem value="text">文字筆記</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             
-            {newItemType === "score" && (
+            {(newItemType === "score" || newItemType === "manual_score") && (
               <>
                  <div className="grid gap-2 w-[80px]">
-                   <Label>Min</Label>
+                   <Label>最小值</Label>
                    <Input type="number" value={newItemMin} onChange={(e) => setNewItemMin(e.target.value)} />
                  </div>
                  <div className="grid gap-2 w-[80px]">
-                   <Label>Max</Label>
+                   <Label>最大值</Label>
                    <Input type="number" value={newItemMax} onChange={(e) => setNewItemMax(e.target.value)} />
                  </div>
               </>
             )}
 
             <Button onClick={handleAddItem} className="bg-primary text-primary-foreground hover:bg-primary/90">
-              <Plus className="w-4 h-4 mr-2" /> Add Item
+              <Plus className="w-4 h-4 mr-2" /> 新增項目
             </Button>
           </div>
 
@@ -137,10 +144,10 @@ export default function SettingsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Label</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Details</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
+                  <TableHead>名稱</TableHead>
+                  <TableHead>類型</TableHead>
+                  <TableHead>細節</TableHead>
+                  <TableHead className="text-right">操作</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -149,7 +156,7 @@ export default function SettingsPage() {
                     <TableCell className="font-medium">{item.label}</TableCell>
                     <TableCell className="font-mono text-xs uppercase text-muted-foreground">{item.type}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">
-                      {item.type === "score" && `Range: ${item.min} - ${item.max}`}
+                      {(item.type === "score" || item.type === "manual_score") && `範圍: ${item.min} - ${item.max}`}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="icon" onClick={() => handleDeleteItem(item.id)} className="text-destructive hover:bg-destructive/10">
