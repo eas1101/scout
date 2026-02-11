@@ -29,14 +29,19 @@ export default defineConfig({
       plugins: [],
     },
   },
-  root: path.resolve(import.meta.dirname, "client"),
+  
+  // ▼▼▼ 修改了這裡 ▼▼▼
+  // 原本指向 "client"，現在指向根目錄，這樣就能找到 index.html 了
+  root: import.meta.dirname, 
+  // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
   build: {
     outDir: path.resolve(import.meta.dirname, "dist"),
     emptyOutDir: true,
   },
   server: {
     host: "0.0.0.0",
-    allowedHosts: true,
+    allowedHosts: true, // 注意：在新版 Vite 這可能需要是陣列或字串，若報錯請改為 true 或特定 host
     fs: {
       strict: true,
       deny: ["**/.*"],
